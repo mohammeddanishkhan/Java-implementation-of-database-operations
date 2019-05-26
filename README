@@ -1,0 +1,13 @@
+A java based implementation of following database operations:
+
+simple select both with and without where clause
+indexed select (B+ tree based index and Linear hash map based index) both with and without where clause
+
+Union operation
+minus operation
+
+join operation simple
+join operation indexed (B+ tree based index and Linear hash map based index)
+
+storing of tuples using B+ tree implementation and linear hash map implementation
+
