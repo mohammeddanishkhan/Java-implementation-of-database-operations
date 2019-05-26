@@ -1,0 +1,545 @@
+package main;
+
+/************************************************************************************
+ * @file LinHashMap.java
+ *
+ * @author  John Miller
+ */
+
+import java.io.*;
+import java.lang.reflect.Array;
+import static java.lang.System.out;
+import java.util.*;
+
+/************************************************************************************
+ * This class provides hash maps that use the Linear Hashing algorithm.
+ * A hash table is created that is an array of buckets.
+ */
+public class LinHashMap <K, V>
+       extends AbstractMap <K, V>
+       implements Serializable, Cloneable, Map <K, V>
+{
+    /** The number of slots (for key-value pairs) per bucket.
+     */
+    private static final int SLOTS = 4;
+
+    /** The class for type K.
+     */
+    private final Class <K> classK;
+
+    /** The class for type V.
+     */
+    private final Class <V> classV;
+
+    /********************************************************************************
+     * This inner class defines buckets that are stored in the hash table.
+     */
+    private class Bucket
+    {
+        int    nKeys;
+        K []   key;
+        V []   value;
+        Bucket next;
+
+        @SuppressWarnings("unchecked")
+        Bucket (Bucket n)
+        {
+            nKeys = 0;
+            key   = (K []) Array.newInstance (classK, SLOTS);
+            value = (V []) Array.newInstance (classV, SLOTS);
+            next  = n;
+        } // constructor
+        
+    } // Bucket inner class
+
+    /** The list of buckets making up the hash table.
+     */
+    private final List <Bucket> hTable;
+
+    /** The modulus for low resolution hashing
+     */
+    private int mod1;
+
+    /** The modulus for high resolution hashing
+     */
+    private int mod2;
+
+    /** Counter for the number buckets accessed (for performance testing).
+     */
+    private int count = 0;
+
+    /** The index of the next bucket to split.
+     */
+    private int split = 0;
+   
+    /** Number of keys in hasTable.
+     */
+    private int N=0;
+
+    /** Number of keys in hasTable.
+     */
+    private double bf=0.7;//minimum blocking factor is 90%
+    
+    /********************************************************************************
+     * Construct a hash table that uses Linear Hashing.
+     * @param classK    the class for keys (K)
+     * @param classV    the class for keys (V)
+     * @param initSize  the initial number of home buckets (a power of 2, e.g., 4)
+     */
+    public LinHashMap (Class <K> _classK, Class <V> _classV)    // , int initSize)
+    {
+        classK = _classK;
+        classV = _classV;
+        hTable = new ArrayList <> ();
+        mod1   = 4;                        // initSize;
+        mod2   = 2 * mod1;
+        
+       
+       
+        for(int i=0;i<mod1;i++)
+        {
+        Bucket tempBucket=new Bucket(null);
+        hTable.add(tempBucket);
+        }
+      
+       
+    } // constructor
+
+    /********************************************************************************
+     * Return a set containing all the entries as pairs of keys and values.
+     * @return  the set view of the map
+     */
+    public Set <Map.Entry <K, V>> entrySet ()
+    {
+
+        var enSet = new HashSet <Map.Entry <K, V>> ();
+         for(int i = 0; i < hTable.size(); i++)
+        {
+            Bucket temp = hTable.get(i);
+            for(int j=0; j<temp.nKeys; j++)
+            {
+                enSet.add(new AbstractMap.SimpleEntry<>(temp.key[j], temp.value[j]));
+            }
+        }
+       
+                    
+        return enSet;
+
+       
+    } // entrySet
+
+    /********************************************************************************
+     * Given the key, look up the value in the hash table.
+     * @param key  the key used for look up
+     * @return  the value associated with the key
+     */
+    public V get (Object key)
+    {
+        var i = h (key);
+        if(i<split)
+        i=h2(key);
+        Bucket temp = hTable.get(i);
+        if(temp.nKeys==0)
+        return null;
+        while(temp!=null)
+        {
+        count++;
+        for(int m=0; m<temp.nKeys; m++){
+                if(key.equals(temp.key[m]))
+                    return temp.value[m];
+            }
+            temp = temp.next; 
+        }
+
+        return null;
+
+     
+    } // get
+
+    /********************************************************************************
+     * splits the bucket at split pointer and redistribute keys.
+     * @return  the set view of the map
+     */
+    public void split(int i) {
+   
+      Bucket p=hTable.get(split);
+      Bucket q=new Bucket(null);
+      q=p;
+      while(p.next!=null) {
+      
+      if(p.key[0]==null && p.next!=null) {
+      
+      q.next=p.next;
+      
+      
+      }
+      
+      q=p;
+      p=p.next;
+      
+      
+      }
+      
+    System.out.println("Blocking factor exceeds, need to split,\n splitting the bucket..");
+//split the bucket at split position
+   
+    //create new bucket and add new bucket
+    Bucket newBucket=new Bucket(null);
+    hTable.add(newBucket);
+   
+    //create new temp bucket for travesering
+          Bucket temp=new Bucket(null);
+          System.out.println("Spliting at->"+split+" Number of buckets"+hTable.size());
+          temp=hTable.get(split);
+          
+      
+          //check if the bucket at split has keys in it
+          if(hTable.get(split).nKeys!=0) {
+          int m=0;
+          while(temp!=null) {// redistrtibute all the keys at split and also in Overflow bucket of split
+          m=0;
+          
+          while(m<temp.nKeys)
+              {
+          if(temp.key[m]==null) {
+          m++;
+          continue;
+          }
+          
+          System.out.println("key under consideration for redistribution->"+(temp.key[m]));
+          System.out.println("The number of keys are ->"+temp.nKeys);
+          int i1=h(temp.key[m]);
+          int i2=h2(temp.key[m]);
+          
+          System.out.println("Mod value ->"+mod2);
+              System.out.println("New position for above key is ->"+i2);
+              System.out.println("The value of m is ->"+m);
+              if(i1==i2)//if hash is in same bucket before and after applying higher resolution function 
+              {
+              //need to check
+              m++;
+              continue;
+              }
+              else {
+              System.out.println("N keys->"+hTable.get(i2).nKeys);
+              if(hTable.get(i2).nKeys<SLOTS)//if key have  slot in home bucket
+              {
+              hTable.get(i2).key[hTable.get(i2).nKeys]=temp.key[m];//copy key to new hashed bucket
+                      hTable.get(i2).value[hTable.get(i2).nKeys]=temp.value[m];//copy value to new hashed bucket
+                      hTable.get(i2).nKeys++;//increment number of keys in new bucket
+                      // hTable.get(i2).next=hTable.get(i2).next;
+                      
+                      
+                      
+                      
+                      
+              }
+              else {// if key has no slot then add OF bucket
+              Bucket OF=new Bucket(null);
+              OF.key[0]=temp.key[m];
+              OF.value[0]=temp.value[m];
+              OF.nKeys++;
+              
+              
+              Bucket tempBucket2=hTable.get(i2);
+              
+                            while(tempBucket2.next!=null)//check if overflow bucket already present
+                            {
+                            tempBucket2=tempBucket2.next;
+                            
+                            }//go till end of link list
+              
+                            tempBucket2.next=OF;
+          
+          
+              }
+              }
+              temp.key[m]=null;
+                  temp.value[m]=null;
+                  
+                  m++;
+          
+          }
+          
+          temp=temp.next;
+          }//end of first while
+      
+          }
+          temp=hTable.get(split);
+          int how=0;
+        /* for(int key=0;key<temp.nKeys;key++) {
+          
+          if(temp.key[key]==null && (key!=SLOTS-1))
+          {
+          int t=key+1;
+          while(t<SLOTS) {
+          if(temp.key[t]!=null) {
+          temp.key[key]=temp.key[t];
+          temp.value[key]=temp.value[t];
+          temp.key[t]=null;
+          temp.value[t]=null;
+          
+          }
+          t++;
+          
+          }
+          
+          }
+          
+          }*/
+          for(int key=0;key<temp.nKeys;key++) {
+          
+          if(temp.key[key]!=null)
+          {
+          how++;
+          
+          }
+          
+          }
+          squeeze(split);
+          temp.nKeys=how;
+          
+          split++;
+          if(split==mod1) {//split==mod1 implies that all the buckets are spliited, so need to update mmod and split
+              mod1=mod1*2;
+                 mod2=mod1*2;
+                 split=0; 
+             }
+       
+    }
+    
+    void squeeze(int split) {
+   
+    int flag=0;
+    for(int i=0;i<SLOTS;i++) {
+   
+    if(hTable.get(split).key[i]==null)
+    {
+    flag=i;
+   
+    }
+    else {
+   
+    if(flag>0) {
+    hTable.get(split).key[flag]=hTable.get(split).key[i];
+    hTable.get(split).value[flag]=hTable.get(split).value[i];
+    hTable.get(split).key[i]=null;
+    hTable.get(split).value[i]=null;
+    flag=0;
+   
+    }
+    }
+   
+    }
+   
+   
+    }
+   
+    /********************************************************************************
+     * Put the key-value pair in the hash table.
+     * @param key    the key to insert
+     * @param value  the value to insert
+     * @return  null (not the previous value)
+     */
+    public V put (K key, V value)
+    {
+   
+   
+    N++;//increase number of keys count
+    System.out.println();
+    
+        var i = h (key);
+        
+        if(i<split)
+        i=h2(key);
+        
+        out.println ("LinearHashMap.put: key = " + key + ", h() = " + i + ", value = " + value);
+        if(hTable.get(i).nKeys<SLOTS) {//if there is slot in bucket
+       
+        //add the key into bucket at i
+    hTable.get(i).key[hTable.get(i).nKeys]=key;
+    hTable.get(i).value[hTable.get(i).nKeys]=value;
+    hTable.get(i).nKeys++; 
+    System.out.println("Added new record at " +i+"\nchecking blocking factor...");
+
+    //after adding slot check blocking factor
+    // blocking factor= number of number of records/Number of buckets*2
+   
+    double bfr;
+    int M=hTable.size();
+   
+    bfr=(double)N/(M*SLOTS);
+   
+    System.out.println("The number of records are : "+N);
+    System.out.println("The number of buckets are : "+M);
+    System.out.println("The number of SLOTS are : "+SLOTS);
+    System.out.println("The blocking factor is : "+bfr);
+   
+   
+    //if blocking factor greater than 90% then split
+   
+    if(bfr>=bf) {
+   
+    System.out.println("BEFORE SPLITTION***************");
+    print();
+    split(i);
+   
+    System.out.println("After SPLITTION***************");
+    print();
+   
+    }//splitting buckets ends
+    else 
+    System.out.println("No need of splitting, blocking factor within desired range(90%)");
+        }
+        else {
+       
+        //check if already overflow bucket present
+       
+        //create a overflow bucket
+    System.out.println("Creating an overflow bucket..");
+    Bucket tempBucket=new Bucket(null);
+        tempBucket.key[0]=key;
+        tempBucket.value[0]=value;
+        tempBucket.nKeys++;
+    Bucket tempBucket2=hTable.get(i);
+      System.out.println("i is "+i);
+          while(tempBucket2.next!=null)//check if overflow bucket already present
+          {
+          tempBucket2=tempBucket2.next;
+          }
+          tempBucket2.next=tempBucket;
+          
+          double bfr;
+    int M=hTable.size();
+   
+    bfr=(double)N/(M*SLOTS);
+   
+    System.out.println("The number of records are : "+N);
+    System.out.println("The number of buckets are : "+M);
+    System.out.println("The number of SLOTS are : "+SLOTS);
+    System.out.println("The blocking factor is : "+bfr);
+   
+   
+    //if blocking factor greater than 90% then split
+   
+    if(bfr>bf) {
+   
+    System.out.println("BEFORE SPLITTION***************");
+    print();
+    split(i);
+   
+    System.out.println("After SPLITTION***************");
+    print();
+   
+    }//splitting buckets ends
+    else 
+    System.out.println("No need of splitting, blocking factor within desired range(90%)");
+        }
+        
+        return null;
+    } // put
+
+    /********************************************************************************
+     * Return the size (SLOTS * number of home buckets) of the hash table. 
+     * @return  the size of the hash table
+     */
+    public int size ()
+    {
+        return SLOTS * (mod1 + split);
+    } // size
+
+    /********************************************************************************
+     * Print the hash table.
+     */
+    private void print ()
+    {
+        out.println ("Hash Table (Linear Hashing)");
+        out.println ("-------------------------------------------");
+
+        //  T O   B E   I M P L E M E N T E D
+        int count=0;
+        for(Bucket i:hTable) {
+        int nkey=0;
+        
+        System.out.println("\n\n----------Bucket- "+ count+++"----------------"+"\n");
+        while(nkey<i.key.length) {
+       
+        System.out.print("| KEY "+i.key[nkey]+" VALUE "+ i.value[nkey]+" |");
+       
+        nkey++;
+        }
+        Bucket temp=new Bucket(null);
+        temp=i.next;
+       
+        while(temp!=null) {
+        System.out.print("->");
+        nkey=0;
+        while(nkey<temp.nKeys) {
+        System.out.print("| KEY "+temp.key[nkey]+" VALUE "+ temp.value[nkey]+"|");
+            nkey++;
+            }
+       
+        temp=temp.next;
+        }
+        System.out.println("\n--------------------------\n");
+        }
+
+        out.println ("-------------------------------------------");
+    } // print
+
+    /********************************************************************************
+     * Hash the key using the low resolution hash function.
+     * @param key  the key to hash
+     * @return  the location of the bucket chain containing the key-value pair
+     */
+    private int h (Object key)
+    {
+        return Math.abs(key.hashCode () % mod1);
+    } // h
+
+    /********************************************************************************
+     * Hash the key using the high resolution hash function.
+     * @param key  the key to hash
+     * @return  the location of the bucket chain containing the key-value pair
+     */
+    private int h2 (Object key)
+    {
+    return Math.abs(key.hashCode () % mod2);
+    } // h2
+
+    /********************************************************************************
+     * The main method used for testing.
+     * @param  the command-line arguments (args [0] gives number of keys to insert)
+     */
+    public static void main (String [] args)
+    {
+
+        var totalKeys = 1000;
+        var RANDOMLY  = true;
+
+        LinHashMap <Integer, Integer> ht = new LinHashMap <> (Integer.class, Integer.class);
+    
+
+        if (RANDOMLY) {
+            var rng = new Random ();
+            for (int i = 1; i <= totalKeys; i ++) ht.put (rng.nextInt (2 * totalKeys), i * i);
+        } else {
+            for (int i = 1; i <= totalKeys; i=i+2) ht.put (i, i * i); ht.print();
+        } // if
+
+        ht.print ();
+        if(!RANDOMLY)
+        for (int i = 0; i <= totalKeys; i++) {
+            out.println ("key = " + i + " value = " + ht.get (i));
+            
+        } // for
+        else {
+        System.out.println("Random Key Generated");
+        //Atharva need to work here
+        }
+        out.println ("-------------------------------------------");
+        out.println ("Average number of buckets accessed = " + ht.count / (double) totalKeys);
+    
+    } // main
+
+} // LinHashMap class
